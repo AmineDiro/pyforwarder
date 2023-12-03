@@ -1,0 +1,22 @@
+[build-system]
+requires = ["maturin>=1.4,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "pyforwarder"
+version = "1.0.0"
+authors = [{ name = "amine dirhoussi", email = "aminedirhoussi1@gmail.com" }]
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+dev = ["black", "toml ~=0.10.2", "flake8"]
+test = ["pytest", "pytest-asyncio", "aiohttp", "tqdm"]
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
