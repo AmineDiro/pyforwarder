@@ -37,8 +37,9 @@ impl SSHProxy {
 
     pub(crate) async fn start(&self) -> io::Result<()> {
         log::info!(
-            "Starting proxy : {}",
-            &self.name.as_ref().unwrap_or(&"".to_string())
+            "Starting proxy  {}  listening loop {:?}",
+            &self.name.as_ref().unwrap_or(&"".to_string()),
+            &self.listener.local_addr().unwrap()
         );
         loop {
             let (socket, _) = self.listener.accept().await?;
@@ -56,13 +57,13 @@ async fn tunnel_to_socket(
         match event {
             // Handle data received from the tunnel.
             makiko::TunnelEvent::Data(mut data) => {
-                log::debug!("received data in tunnel");
+                log::info!("received data in tunnel");
                 writer.write_all_buf(&mut data).await?;
             }
 
             // Handle EOF from the tunnel.
             makiko::TunnelEvent::Eof => {
-                log::debug!("received tunnel EOF. Closing tunnel loop.");
+                log::info!("received tunnel EOF. Closing tunnel loop.");
                 writer.shutdown().await?;
                 break;
             }
@@ -85,7 +86,7 @@ async fn socket_to_tunnel(mut socket_rd: ReadHalf<TcpStream>, tunnel: Tunnel) ->
                 break;
             }
             Ok(n) => {
-                log::debug!("received {} bytesclient data.", n);
+                log::info!("received {} bytesclient data.", n);
                 // TODO : Zero-copy if possible ?
                 let _ = tunnel.send_data(buf.split().freeze()).await.map_err(|e| {
                     log::error!("Tunnel send_data error: {:?}", e);
@@ -113,7 +114,7 @@ async fn handle(ssh_client: Client, socket: TcpStream, connect_addr: SocketAddr)
     // Open a tunnel from the server.
     let channel_config = makiko::ChannelConfig::default();
 
-    log::debug!(
+    log::info!(
         "opening local port forwarding tunnel from {:?} -> {:?}",
         connect_addr,
         origin_addr
@@ -135,7 +136,7 @@ async fn handle(ssh_client: Client, socket: TcpStream, connect_addr: SocketAddr)
         })?;
     let (socket_rd, socket_wr) = tokio::io::split(socket);
     // OpenSSH has a hard coded limit of 10_000 opened channels
-    log::debug!("acquiring permit to open tunnel.");
+    log::info!("acquiring permit to open tunnel.");
     let permit = PERMITS.acquire().await.unwrap();
 
     let tunnel_to_socket_task = tokio::task::spawn(tunnel_to_socket(tunnel_rx, socket_wr));
@@ -145,6 +146,6 @@ async fn handle(ssh_client: Client, socket: TcpStream, connect_addr: SocketAddr)
     let _ = tokio::try_join!(tunnel_to_socket_task, socket_to_tunnnel_task)?;
 
     drop(permit);
-    log::debug!("dropped channel_open permit");
+    log::info!("dropped channel_open permit");
     Ok(())
 }
