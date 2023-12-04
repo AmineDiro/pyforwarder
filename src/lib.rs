@@ -6,7 +6,7 @@ use tokio::{
     task::JoinHandle,
 };
 
-use std::{net::SocketAddr, str::FromStr};
+use std::{net::SocketAddr, str::FromStr, time::Duration};
 pub mod forwarder;
 pub mod ssh_proxy;
 
@@ -17,6 +17,7 @@ static PERMITS: Semaphore = Semaphore::const_new(10_000);
 
 #[pyclass]
 struct PyForwarder {
+    rt: Option<runtime::Runtime>,
     _handle: Option<JoinHandle<()>>,
 }
 
@@ -24,21 +25,22 @@ struct PyForwarder {
 impl PyForwarder {
     #[new]
     fn new() -> Self {
-        Self { _handle: None }
+        let rt = runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .thread_name("forwarder-thread-tokio")
+            .enable_io()
+            .build()
+            .unwrap();
+        Self {
+            rt: Some(rt),
+            _handle: None,
+        }
     }
 
-    pub fn __enter__(&mut self, py: Python<'_>) -> Py<Self> {
+    pub fn __enter__(&mut self, py: Python<'_>) {
         py.allow_threads(|| {
-            // let rt = runtime::Runtime::new().unwrap();
-            let rt = runtime::Builder::new_multi_thread()
-                .worker_threads(1)
-                .thread_name("forwarder-thread-tokio")
-                .enable_io()
-                .build()
-                .unwrap();
-
             let (tx, rx) = oneshot::channel::<()>();
-            let handle = rt.spawn(async move {
+            let handle = self.rt.as_mut().unwrap().spawn(async move {
                 // Define the list of services we want to forward
                 let proxies = vec![SSHProxyConfig {
                     name: Some("simple_http".into()),
@@ -60,8 +62,10 @@ impl PyForwarder {
 
                 forwarder.start().await.unwrap()
             });
-            rx.blocking_recv().unwrap();
-            Py::new(py, self)
+            match rx.blocking_recv() {
+                Ok(_) => self._handle = Some(handle),
+                Err(_) => panic!("can't start forwarder"),
+            }
         })
     }
 
@@ -69,7 +73,12 @@ impl PyForwarder {
         if let Some(handle) = &self._handle {
             handle.abort()
         }
-        log::info!("exited");
+
+        if let Some(rt) = self.rt.take() {
+            rt.shutdown_timeout(Duration::from_secs(1));
+        };
+
+        log::info!("Shutting down port forwarding");
     }
 }
 
@@ -77,7 +86,7 @@ impl PyForwarder {
 #[pymodule]
 fn pyforwarder(_py: Python, m: &PyModule) -> PyResult<()> {
     // Setup logging
-    // pyo3_log::init();
+    pyo3_log::init();
 
     m.add_class::<PyForwarder>()?;
 

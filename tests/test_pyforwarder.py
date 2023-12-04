@@ -1,5 +1,4 @@
 import logging
-import time
 
 import requests
 
@@ -7,7 +6,7 @@ from pyforwarder import PyForwarder
 
 FORMAT = "%(levelname)s %(name)s %(filename)s:%(lineno)d %(message)s"
 logging.basicConfig(format=FORMAT)
-logging.getLogger().setLevel(logging.DEBUG)
+logging.getLogger().setLevel(logging.INFO)
 
 
 with PyForwarder():

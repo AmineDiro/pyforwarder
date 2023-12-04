@@ -15,8 +15,8 @@ classifiers = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
-dev = ["black", "toml ~=0.10.2", "flake8"]
-test = ["pytest", "pytest-asyncio", "aiohttp", "tqdm"]
+dev = ["black", "toml ~=0.10.2", "flake8", "ipython"]
+test = ["pytest", "pytest-asyncio", "requests", "aiohttp", "tqdm"]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
