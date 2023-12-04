@@ -84,7 +84,7 @@ impl PyForwarder {
 
 /// A Python module implemented in Rust.
 #[pymodule]
-fn pyforwarder(_py: Python, m: &PyModule) -> PyResult<()> {
+fn forwardrs(_py: Python, m: &PyModule) -> PyResult<()> {
     // Setup logging
     pyo3_log::init();
 

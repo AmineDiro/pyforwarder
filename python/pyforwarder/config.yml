@@ -1,0 +1,12 @@
+ssh_config:
+  username: "amine"
+  key_filename: "tests/keys/amine_rsa"
+  ssh_port: 22
+  client_interface: "ib0"
+
+services:
+  - name: "http"
+    type: "test"
+    service_host: "localhost"
+    service_port: 8181
+    local_port: 8181

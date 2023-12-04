@@ -20,3 +20,5 @@ test = ["pytest", "pytest-asyncio", "requests", "aiohttp", "tqdm"]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
+python-source = "python"
+module-name = "pyforwarder.forwardrs"
