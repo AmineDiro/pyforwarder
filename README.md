@@ -31,3 +31,8 @@ services:
   with PyForwarder("./config.yml"):
       ....
 ```
+
+# TODO:
+
+- [ ] Parse IP from interface
+- [ ] Support full config
