@@ -1,5 +1,6 @@
 use forwarder::Forwarder;
-use pyo3::prelude::*;
+use pyo3::{exceptions::PyValueError, prelude::*};
+use std::{fs, path::PathBuf};
 use tokio::{
     runtime::{self},
     sync::oneshot,
@@ -7,9 +8,11 @@ use tokio::{
 };
 
 use std::{net::SocketAddr, str::FromStr, time::Duration};
+pub mod config;
 pub mod forwarder;
 pub mod ssh_proxy;
 
+use config::Config;
 use tokio::{self, sync::Semaphore};
 
 use ssh_proxy::SSHProxyConfig;
@@ -20,21 +23,28 @@ struct PyForwarder {
     rt: Option<runtime::Runtime>,
     _handle: Option<JoinHandle<()>>,
 }
-
+/// Pyforwarder reads a config_path file and connects to
+///
 #[pymethods]
 impl PyForwarder {
     #[new]
-    fn new() -> Self {
+    #[pyo3(signature = (config_path))]
+    fn new(config_path: PathBuf) -> PyResult<Self> {
+        let config_data = fs::read_to_string(config_path)
+            .map_err(|e| PyValueError::new_err(format!("Can't read config file. err: {:?}", e)))?;
+        let config: Config = serde_yaml::from_str(&config_data)
+            .map_err(|_| PyValueError::new_err("can't deserialize config"))?;
         let rt = runtime::Builder::new_multi_thread()
-            .worker_threads(1)
+            .worker_threads(config.n_workers)
             .thread_name("forwarder-thread-tokio")
             .enable_io()
             .build()
             .unwrap();
-        Self {
+
+        Ok(Self {
             rt: Some(rt),
             _handle: None,
-        }
+        })
     }
 
     pub fn __enter__(&mut self, py: Python<'_>) {
@@ -51,8 +61,9 @@ impl PyForwarder {
                 // Connect to server
                 let forwarder = Forwarder::new(
                     ("localhost", 2222),
-                    "alice".into(),
-                    "alicealice".into(),
+                    "amine".into(),
+                    "/home/amine/Documents/coding/pyforwarder/tests/keys/amine_rsa".into(),
+                    "RSA_256".into(),
                     proxies,
                 )
                 .await;

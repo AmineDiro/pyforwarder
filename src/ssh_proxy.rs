@@ -17,32 +17,29 @@ pub struct SSHProxyConfig {
 pub struct SSHProxy {
     name: Option<String>,
     ssh_client: Client,
-    listener: TcpListener,
+    local_addr: SocketAddr,
     remote_addr: SocketAddr,
 }
 impl SSHProxy {
     pub(crate) async fn new(client: Client, config: SSHProxyConfig) -> Self {
         // TODO : better error
-        let listener = TcpListener::bind(config.local_addr).await.expect(&format!(
-            "Can't start proxy listener given config: {:?}",
-            &config,
-        ));
         Self {
             name: config.name,
             ssh_client: client,
-            listener: listener,
+            local_addr: config.local_addr,
             remote_addr: config.remote_addr,
         }
     }
 
     pub(crate) async fn start(&self) -> io::Result<()> {
+        let listener = TcpListener::bind(self.local_addr).await?;
         log::debug!(
             "Starting proxy  {}  listening loop {:?}",
             &self.name.as_ref().unwrap_or(&"".to_string()),
-            &self.listener.local_addr().unwrap()
+            &self.local_addr
         );
         loop {
-            let (socket, _) = self.listener.accept().await?;
+            let (socket, _) = listener.accept().await?;
             // TODO: this handle will fail if client disconnects
             tokio::spawn(handle(self.ssh_client.clone(), socket, self.remote_addr));
         }
