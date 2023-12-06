@@ -1,0 +1,9 @@
+version: '2'
+services:
+  simple-http:
+    container_name: simple-test
+    image: openssh-simple-http:v1
+    build:
+      context: server/simple_http
+    ports:
+      - 2222:22

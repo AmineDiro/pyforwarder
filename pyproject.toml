@@ -16,7 +16,14 @@ dynamic = ["version"]
 
 [project.optional-dependencies]
 dev = ["black", "toml ~=0.10.2", "flake8", "ipython"]
-test = ["pytest", "pytest-asyncio", "requests", "aiohttp", "tqdm"]
+test = [
+    "pytest",
+    "pytest-asyncio",
+    "requests",
+    "aiohttp",
+    "tqdm",
+    "pytest-docker",
+]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]

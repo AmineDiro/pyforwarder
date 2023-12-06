@@ -1,10 +1,10 @@
-n_workers: 8
+n_workers: 1
 
 ssh_config:
   ssh_server: "localhost"
   ssh_port: 2222
   username: "amine"
-  priv_key_path: "/home/amine/Documents/coding/pyforwarder/tests/keys/amine_rsa"
+  priv_key_path: "./tests/keys/amine_rsa"
   pub_key_algo: "RSA-256"
   client_interface: "ib0"
 

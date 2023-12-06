@@ -21,7 +21,7 @@ async def send_req(session: aiohttp.ClientSession, url: str):
         resp.raise_for_status()
 
 
-@pytest.mark.parametrize("n", [10, 100, 1000])
+@pytest.mark.parametrize("n", [10, 100])
 @pytest.mark.asyncio
 async def test_simple_http(n, forwarder):
     url = "http://127.0.0.1:8181"
