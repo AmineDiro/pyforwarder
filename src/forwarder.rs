@@ -2,12 +2,13 @@ use std::fs;
 use std::io;
 use std::path::PathBuf;
 
-use futures::future::join_all;
 use makiko::{self, Client, ClientEvent, ClientReceiver};
-use tokio::{self, net::ToSocketAddrs};
+use tokio::task::JoinHandle;
+use tokio::{self, sync::oneshot::Sender};
 
-use crate::ssh_proxy::{SSHProxy, SSHProxyConfig};
+use crate::ssh_proxy::SSHProxy;
 
+use crate::config::SSHProxyConfig;
 async fn authenticate(
     client: &Client,
     username: String,
@@ -24,7 +25,7 @@ async fn authenticate(
         .expect("Private key is encrypted");
 
     let pub_key_algo = match pub_key_algo.as_str() {
-        "RSA_256" => &makiko::pubkey::RSA_SHA2_256,
+        "RSA-256" => &makiko::pubkey::RSA_SHA2_256,
         _ => panic!("Can't connect using this public key algorithm"),
     };
 
@@ -45,18 +46,33 @@ async fn authenticate(
 }
 
 pub struct Forwarder {
-    pub client: Client,
-    proxies: Vec<SSHProxy>,
+    remote_addr: (String, u16),
+    username: String,
+    priv_key_path: PathBuf,
+    pub_key_algo: String,
+    proxies_config: Vec<SSHProxyConfig>,
+    proxies_handle: Vec<JoinHandle<()>>,
 }
 impl Forwarder {
-    pub async fn new(
-        remote_addr: impl ToSocketAddrs,
+    pub fn new(
+        remote_addr: (String, u16),
         username: String,
         priv_key_path: PathBuf,
         pub_key_algo: String,
         proxies_config: Vec<SSHProxyConfig>,
     ) -> Self {
-        let socket = tokio::net::TcpStream::connect(remote_addr)
+        Self {
+            remote_addr,
+            username,
+            priv_key_path,
+            pub_key_algo,
+            proxies_config,
+            proxies_handle: vec![],
+        }
+    }
+
+    pub async fn connect_ssh(&self) -> Client {
+        let socket = tokio::net::TcpStream::connect(&self.remote_addr)
             .await
             .expect("Could not open a TCP socket");
         let config = makiko::ClientConfig::default();
@@ -70,24 +86,27 @@ impl Forwarder {
         let _client_events = tokio::task::spawn(client_event_loop(client_rx));
 
         // Try to authenticate using a password.
-        authenticate(&client, username, priv_key_path, pub_key_algo).await;
-        // Build proxies
-        let f_proxies = proxies_config
-            .into_iter()
-            .map(|c| SSHProxy::new(client.clone(), c))
-            .collect::<Vec<_>>();
-        let proxies = join_all(f_proxies).await;
-
-        Self { client, proxies }
+        authenticate(
+            &client,
+            self.username.clone(),
+            self.priv_key_path.clone(),
+            self.pub_key_algo.clone(),
+        )
+        .await;
+        client
     }
 
-    pub async fn start(&self) -> io::Result<()> {
-        // Loop over all the defined services and create the ssh proxy
-        // Blocks here
-        join_all(self.proxies.iter().map(|p| p.start()))
-            .await
-            .into_iter()
-            .collect()
+    pub async fn start(&mut self, tx: Sender<()>) -> io::Result<()> {
+        let client = self.connect_ssh().await;
+        // Build proxies from config and spawn them
+        for config in &self.proxies_config {
+            let proxy = SSHProxy::new(client.clone(), config).await;
+            let handle = tokio::spawn(async move { proxy.start().await.unwrap() });
+            self.proxies_handle.push(handle);
+        }
+
+        tx.send(()).unwrap();
+        Ok(())
     }
 }
 

@@ -7,19 +7,20 @@ use tokio::{
     task::JoinHandle,
 };
 
-use std::{net::SocketAddr, str::FromStr, time::Duration};
+use std::time::Duration;
 pub mod config;
 pub mod forwarder;
 pub mod ssh_proxy;
 
-use config::Config;
+use config::{Config, SSHConfig, SSHProxyConfig};
 use tokio::{self, sync::Semaphore};
 
-use ssh_proxy::SSHProxyConfig;
 static PERMITS: Semaphore = Semaphore::const_new(10_000);
 
 #[pyclass]
 struct PyForwarder {
+    ssh_config: SSHConfig,
+    proxy_config: Vec<SSHProxyConfig>,
     rt: Option<runtime::Runtime>,
     _handle: Option<JoinHandle<()>>,
 }
@@ -32,16 +33,22 @@ impl PyForwarder {
     fn new(config_path: PathBuf) -> PyResult<Self> {
         let config_data = fs::read_to_string(config_path)
             .map_err(|e| PyValueError::new_err(format!("Can't read config file. err: {:?}", e)))?;
-        let config: Config = serde_yaml::from_str(&config_data)
+        let Config {
+            n_workers,
+            ssh_config,
+            proxy_config,
+        }: Config = serde_yaml::from_str(&config_data)
             .map_err(|_| PyValueError::new_err("can't deserialize config"))?;
         let rt = runtime::Builder::new_multi_thread()
-            .worker_threads(config.n_workers)
+            .worker_threads(n_workers)
             .thread_name("forwarder-thread-tokio")
             .enable_io()
             .build()
             .unwrap();
 
         Ok(Self {
+            ssh_config,
+            proxy_config,
             rt: Some(rt),
             _handle: None,
         })
@@ -49,29 +56,20 @@ impl PyForwarder {
 
     pub fn __enter__(&mut self, py: Python<'_>) {
         py.allow_threads(|| {
+            // Onshot channel to signal we have spawned the proxies
             let (tx, rx) = oneshot::channel::<()>();
-            let handle = self.rt.as_mut().unwrap().spawn(async move {
-                // Define the list of services we want to forward
-                let proxies = vec![SSHProxyConfig {
-                    name: Some("simple_http".into()),
-                    local_addr: SocketAddr::from_str("127.0.0.1:8181").unwrap(),
-                    remote_addr: SocketAddr::from_str("127.0.0.1:8181").unwrap(),
-                }];
+            let mut forwarder = Forwarder::new(
+                (self.ssh_config.ssh_server.clone(), self.ssh_config.ssh_port),
+                self.ssh_config.username.clone(),
+                self.ssh_config.priv_key_path.clone().into(),
+                self.ssh_config.pub_key_algo.clone(),
+                self.proxy_config.clone(),
+            );
 
-                // Connect to server
-                let forwarder = Forwarder::new(
-                    ("localhost", 2222),
-                    "amine".into(),
-                    "/home/amine/Documents/coding/pyforwarder/tests/keys/amine_rsa".into(),
-                    "RSA_256".into(),
-                    proxies,
-                )
-                .await;
+            let handle = self.rt.as_mut().unwrap().spawn(async move {
                 // Note: once we have created the forwarder => we have binded start the ssh_proxies
                 // we can signal to the task that we can start receiving requests
-                tx.send(()).unwrap();
-
-                forwarder.start().await.unwrap()
+                forwarder.start(tx).await.unwrap()
             });
             match rx.blocking_recv() {
                 Ok(_) => self._handle = Some(handle),

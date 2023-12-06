@@ -35,4 +35,4 @@ services:
 # TODO:
 
 - [ ] Parse IP from interface
-- [ ] Support full config
+- [ ] Change proxy to SSHconfig

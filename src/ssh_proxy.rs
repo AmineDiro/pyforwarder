@@ -1,5 +1,9 @@
 use makiko::{self, bytes::BytesMut, Client, Tunnel, TunnelReceiver};
-use std::{io, net::SocketAddr};
+use std::{
+    io,
+    net::{IpAddr, SocketAddr},
+    str::FromStr,
+};
 
 use tokio::{
     self,
@@ -7,27 +11,31 @@ use tokio::{
     net::{TcpListener, TcpStream},
 };
 
-use crate::PERMITS;
-#[derive(Debug)]
-pub struct SSHProxyConfig {
-    pub name: Option<String>,
-    pub local_addr: SocketAddr,
-    pub remote_addr: SocketAddr,
-}
+use crate::{config::SSHProxyConfig, PERMITS};
+#[derive(Clone)]
 pub struct SSHProxy {
     name: Option<String>,
     ssh_client: Client,
     local_addr: SocketAddr,
     remote_addr: SocketAddr,
 }
+
 impl SSHProxy {
-    pub(crate) async fn new(client: Client, config: SSHProxyConfig) -> Self {
+    pub(crate) async fn new(client: Client, config: &SSHProxyConfig) -> Self {
         // TODO : better error
         Self {
-            name: config.name,
+            name: Some(config.name.clone()),
             ssh_client: client,
-            local_addr: config.local_addr,
-            remote_addr: config.remote_addr,
+            local_addr: (
+                IpAddr::from_str(&config.local_ip).unwrap(),
+                config.local_port,
+            )
+                .into(),
+            remote_addr: (
+                IpAddr::from_str(&config.service_ip).unwrap(),
+                config.service_port,
+            )
+                .into(),
         }
     }
 
