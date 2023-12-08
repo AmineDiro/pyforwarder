@@ -1,5 +1,7 @@
 FROM ubuntu:jammy
-RUN apt-get update && apt-get install -y openssh-server python3
+RUN apt-get update && apt-get install -y openssh-server python3 python3-pip
+RUN pip install aiohttp
+
 RUN mkdir -p /run/sshd
 
 RUN useradd -m alice && echo 'alice:alicealice' | chpasswd
@@ -15,5 +17,6 @@ COPY sshd_config /etc/ssh/sshd_config
 WORKDIR /app
 # entrypoint
 COPY entrypoint.sh /scripts/entrypoint.sh
+COPY async_http_server.py /app/async_http_server.py
 RUN chmod +x /scripts/entrypoint.sh
 ENTRYPOINT ["/bin/bash", "/scripts/entrypoint.sh"]
