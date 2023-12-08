@@ -30,27 +30,30 @@ struct PyForwarder {
 impl PyForwarder {
     #[new]
     #[pyo3(signature = (config_path))]
-    fn new(config_path: PathBuf) -> PyResult<Self> {
-        let config_data = fs::read_to_string(config_path)
-            .map_err(|e| PyValueError::new_err(format!("Can't read config file. err: {:?}", e)))?;
-        let Config {
-            n_workers,
-            ssh_config,
-            proxy_config,
-        }: Config = serde_yaml::from_str(&config_data)
-            .map_err(|_| PyValueError::new_err("can't deserialize config"))?;
-        let rt = runtime::Builder::new_multi_thread()
-            .worker_threads(n_workers)
-            .thread_name("forwarder-thread-tokio")
-            .enable_io()
-            .build()
-            .unwrap();
+    fn new(config_path: PathBuf, py: Python<'_>) -> PyResult<Self> {
+        py.allow_threads(|| {
+            let config_data = fs::read_to_string(config_path).map_err(|e| {
+                PyValueError::new_err(format!("Can't read config file. err: {:?}", e))
+            })?;
+            let Config {
+                n_workers,
+                ssh_config,
+                proxy_config,
+            }: Config = serde_yaml::from_str(&config_data)
+                .map_err(|_| PyValueError::new_err("can't deserialize config"))?;
+            let rt = runtime::Builder::new_multi_thread()
+                .worker_threads(n_workers)
+                .thread_name("forwarder-thread-tokio")
+                .enable_io()
+                .build()
+                .unwrap();
 
-        Ok(Self {
-            ssh_config,
-            proxy_config,
-            rt: Some(rt),
-            _handle: None,
+            Ok(Self {
+                ssh_config,
+                proxy_config,
+                rt: Some(rt),
+                _handle: None,
+            })
         })
     }
 

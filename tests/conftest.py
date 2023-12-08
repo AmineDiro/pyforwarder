@@ -1,10 +1,6 @@
 import time
-from pathlib import Path
 
 import pytest
-import requests
-
-from pyforwarder import PyForwarder
 
 
 @pytest.fixture(scope="session")
@@ -16,10 +12,3 @@ def simple_http_openssh(docker_services):
     # TODO: find a better way to check for container to spawn
     time.sleep(2)
     return url
-
-
-@pytest.fixture(scope="session")
-def forwarder(simple_http_openssh):
-    path = Path("./tests/config.yml")
-    with PyForwarder(path):
-        yield
